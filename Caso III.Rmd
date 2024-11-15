@@ -1,0 +1,334 @@
+---
+title: "Caso III"
+author: "Abigail Monterroso"
+date: "2023-07-02"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+setwd("C:/Users/abiga/Documents/DATAR")
+
+library(ggplot2)
+library(RColorBrewer)
+library(dplyr)
+library(fastDummies)
+library(nnet)
+library(broom)
+library(pROC)
+
+bank <- read.csv("bank1.csv")
+```
+
+1. Preparar variable a clasificar: 
+
+```{r}
+bank$Credit_Score = as.factor(bank$Credit_Score)
+bank$Credit_Score = relevel(bank$Credit_Score,ref = "0")
+```
+
+2. Exploración variables cualitativas:
+
+```{r cars}
+credit1 <- bank %>% 
+  group_by(Credit_Score) %>% 
+  summarise(clientes = n())
+credit1
+
+ggplot(credit1,aes(x=reorder(Credit_Score,-clientes),y=clientes))+
+  geom_bar(stat = "identity",aes(fill=Credit_Score))
+```
+
+Existe una mayor cantidad de clientes con un nivel de credito regular, seguidos por los malos y una menro cantidade de personas con una buena calificación de credito. Por lo tanto se espera que los resultados reflejen esta tendencia.  
+
+```{r}
+ocupaciont1 <- bank %>% 
+  group_by(Ocupacion) %>% 
+  summarise(clientes = n())
+ocupaciont1
+
+ggplot(ocupaciont1,aes(x=reorder(Ocupacion,-clientes),y=clientes))+
+  geom_bar(stat = "identity",aes(fill=Ocupacion))+ scale_x_discrete(guide=guide_axis(angle=45))
+
+ocupacion_CS0 <- bank[bank$Credit_Score == 0,] %>% 
+  group_by(Ocupacion) %>% 
+  summarise(clientes = n())
+ocupacion_CS0
+ggplot(ocupacion_CS0,aes(x=reorder(Ocupacion,-clientes),y=clientes))+
+  geom_bar(stat = "identity",aes(fill=Ocupacion))+ scale_x_discrete(guide=guide_axis(angle=45))
+
+```
+
+La cantidad de clientes por cada profesión parece uniforme, indicando que no existen una cantidad de clientes similares por cada profesión. La grafica de las profesiones de clientes con un buen record crediticio se mantiene similar a la anterior, pero en un distinto orden y con una marcada reducción de clientes para un par de profesiones como writter. De entre las variables que se vieron más afectadas por el filtro se encuentra: Lawyer y Mechanic 
+
+```{r}
+pago_min1 <- bank %>% 
+  group_by(Pago_minimo) %>% 
+  summarise(clientes = n())
+pago_min1
+
+ggplot(pago_min1,aes(x=reorder(Pago_minimo,-clientes),y=clientes))+
+  geom_bar(stat = "identity",aes(fill=Pago_minimo))
+
+pago_min.CS0 <- bank[bank$Credit_Score == 0,] %>% 
+  group_by(Pago_minimo) %>% 
+  summarise(clientes = n())
+pago_min.CS0
+ggplot(pago_min.CS0,aes(x=reorder(Pago_minimo,-clientes),y=clientes))+
+  geom_bar(stat = "identity",aes(fill=Pago_minimo))+ scale_x_discrete(guide=guide_axis(angle=45))
+```
+
+Aunque existe una mayor cantidad de clientes de los cuales su ultimo pago fue el minimo, se nota que aquellos que no dieron el minimo tienen un mejor record crediticio.
+
+```{r}
+pagost1 <- bank %>% 
+  group_by(Tipo_pago) %>% 
+  summarise(clientes = n())
+pagost1
+
+ggplot(pagost1,aes(x=reorder(Tipo_pago,-clientes),y=clientes))+
+  geom_bar(stat = "identity",aes(fill=Tipo_pago))
+
+pagos.CS0 <- bank[bank$Credit_Score == 0,] %>% 
+  group_by(Tipo_pago) %>% 
+  summarise(clientes = n())
+pagos.CS0
+ggplot(pagos.CS0,aes(x=reorder(Tipo_pago,-clientes),y=clientes))+
+  geom_bar(stat = "identity",aes(fill=Tipo_pago))+ scale_x_discrete(guide=guide_axis(angle=45))
+```
+
+Aqui se puede ver variación entre los datos generales por tipo de pagos, y la tendencia de aquellos con un buen record crediticio. Se nota que los que hacer pocos pagos de valor pequeño y los de muchos pagos a valor mediano tienen una mayor probabilidad de tener un buen credito.
+
+3. Evaluación de variables cualitativas: 
+
+```{r}
+bank2 <- dummy_cols(bank,select_columns = c("Tipo_pago", "Pago_minimo", "Ocupacion"))
+
+pagost2 <- table(Pago1 = bank2$Tipo_pago_1, Credito = bank2$Credit_Score)
+pagost2
+prop.table(pagost2,1) 
+summary(pagost2)
+
+pagost3 <- table(Pago5 = bank2$Tipo_pago_5, Credito = bank2$Credit_Score)
+pagost3
+prop.table(pagost3,1) 
+summary(pagost3)
+```
+
+Para los clientes con muchos pagos de valor mediano se rechaza la Ho con una confianza de 95%, por lo que se concluye que si existe una relación entre esta variable y credit score. Como se esperaba, la mayoría de daots se encuentran con un credito regular, aunque si muestra una mayor proporción de clientes con un buen record crediticio mayor al de los de tipo 1 con 20%
+
+```{r}
+pago_min2 <- table(Pago_min_si = bank2$Pago_minimo_1, Credito = bank2$Credit_Score)
+pago_min2
+prop.table(pago_min2,1) 
+summary(pago_min2)
+
+pago_min3 <- table(Pago_min_No = bank2$Pago_minimo_0, Credito = bank2$Credit_Score)
+pago_min3
+prop.table(pago_min3,1) 
+summary(pago_min3)
+```
+
+Con un nivel de confianza de 95%, se concluye que ambas variables parecen tener una relación con credit score. Asímismo, se puede notar que aquellos que su ultimo pago no fue el minimo tienen una mayor proporción de clientes con un buen record crediticio.
+
+```{r}
+Abogados <- table(Abogado = bank2$Ocupacion_Lawyer, Credito = bank2$Credit_Score)
+Abogados
+prop.table(Abogados,1) 
+summary(Abogados)
+
+Mecanico <- table(Mecanico = bank2$Ocupacion_Mechanic, Credito = bank2$Credit_Score)
+Abogados
+prop.table(Mecanico,1) 
+summary(Mecanico)
+
+Cientifico <- table(Cientifico = bank2$Ocupacion_Scientist, Credito = bank2$Credit_Score)
+Abogados
+prop.table(Cientifico,1) 
+summary(Cientifico)
+
+```
+
+Con un nivel de confianza de 95% se concluye que todas las variables mantiene una relación con el credit score, por lo que pueden ser utilizadas para formar un modelo.
+
+4. Exploración de variables numéricas:
+
+```{r}
+summary(bank$Edad)
+hist(bank$Edad)
+boxplot(bank$Edad)
+#No existen muchos datos atipicos, la mayoría parece estar entre 20-40 años de edad. Parece seguir una forma normal. 
+
+summary(bank$Ingreso_anual)
+hist(bank$Ingreso_anual)
+boxplot(bank$Ingreso_anual)
+#Demasiados datos atipicos, salario muy por arriba de la media.
+
+summary(bank$Ingreso_mensual)
+hist(bank$Ingreso_mensual)
+boxplot(bank$Ingreso_mensual)
+#No tantos datos atipicos.
+
+summary(bank$Cuentas_bancarias)
+hist(bank$Cuentas_bancarias)
+boxplot(bank$Cuentas_bancarias)
+#No tantos datos atipicos, pero los que existen se alejan demasiado impactando fuertemente a la media. La mayoría parece centrarse entre 1-10 cuenstas.
+
+summary(bank$Tasa_Interes)
+hist(bank$Tasa_Interes)
+boxplot(bank$Tasa_Interes)
+#0 datos atipicos, parece más uniforme que otra cosa.
+
+summary(bank$Meses_atraso)
+hist(bank$Meses_atraso)
+boxplot(bank$Meses_atraso)
+
+summary(bank$Cambio_limite)
+hist(bank$Cambio_limite)
+boxplot(bank$Cambio_limite)
+
+summary(bank$Consulta_credito)
+hist(bank$Consulta_credito)
+boxplot(bank$Consulta_credito)
+
+summary(bank$Deuda)
+hist(bank$Deuda)
+boxplot(bank$Deuda)
+#No tantos datos atipicos.
+
+summary(bank$Utilizacion_credito)
+hist(bank$Utilizacion_credito)
+boxplot(bank$Utilizacion_credito)
+
+summary(bank$Inversion_mensual)
+hist(bank$Inversion_mensual)
+boxplot(bank$Inversion_mensual)
+#Demasiados outliers
+
+summary(bank$Balance_mensual)
+hist(bank$Balance_mensual)
+boxplot(bank$Balance_mensual)
+#Demasiados outliers
+
+summary(bank$Historial_crediticio)
+hist(bank$Historial_crediticio)
+boxplot(bank$Historial_crediticio)
+#Sin outliers parece inclinarse a ser más uniforme
+```
+
+De esta eploración se filtran aquellas que muestran una menor cantidad de outliers, así como una forma no tan uniforme, ya que se espera que tengan una mayor relación con la variable de credit score. 
+
+
+5. Evaluación de variables númericas:
+
+```{r pressure, echo=FALSE}
+Age <- multiclass.roc(bank2$Credit_Score~bank2$Edad)
+Age #area bajo la curva es de 59.21%
+
+Ing_Mnsual <- multiclass.roc(bank2$Credit_Score~bank2$Ingreso_mensual)
+Ing_Mnsual #area bajo la curva es de 61.94%
+
+Atra_Mnsual <- multiclass.roc(bank2$Credit_Score~bank2$Meses_atraso)
+Atra_Mnsual  #area bajo la curva es de 75.19%
+
+Deuda <- multiclass.roc(bank2$Credit_Score~bank2$Deuda)
+Deuda #area bajo la curva es de 73.05%
+
+Deuda <- multiclass.roc(bank2$Credit_Score~bank2$Balance_mensual)
+Deuda #area bajo la curva es de 62.64%
+```
+
+Se puede notar que las mejores variables para utilizar en el modelo son meses de atraso y Deuda, con un area bajo la curva de más de 70, lo cual las hace buenas candidatas para predecir lo valores de credito.
+
+
+6. Evaluar el modelo con 2 datasets, train y test:
+
+```{r}
+index=sort(sample(nrow(bank2),nrow(bank2)*0.70))
+train= bank2[index,]
+test= bank2[-index,]
+
+
+modelo1 = multinom(Credit_Score~ Ocupacion_Lawyer+Tipo_pago_5+Ingreso_mensual+Meses_atraso+Deuda+Balance_mensual,data = train, na.action = na.exclude)
+
+summary(modelo1)
+modelo1$AIC
+
+tidy(modelo1) 
+```
+
+Para este modelo se toma la varible de lawyer, ya que muestra la mayor cantidad de datos y un buen porcentaje de clientes con un buen credito. Asímismo, meses atraso, deuda y balance mensual mostraron el area bajo la curva mayor de los datos analizados, y por lo tanto se incluyen en el modelo. El tipo de pago 5 es donde se encuentran mayor número de clientes con un buen credito. 
+
+Tanto para creditos regulares como malos se ve una relación directamente proporcional con cada una de las variables escogidas, donde la probabilidad de que un cliente perteneca a una de estas aumenta por cada unidad que suba o cualidad a la que pertenezca. Deuda es la que parece tener más impacto en los resultados, con el coeficiente más alto. No se consideraría un modelo efectivo con un AIC bastante alto. 
+
+ 
+```{r}
+modelo2 = multinom(Credit_Score~Ingreso_mensual+Meses_atraso+Ocupacion_Mechanic+Tipo_pago_1+Pago_minimo_0+Ocupacion_Scientist+Deuda,data = train, na.action = na.exclude)
+
+summary(modelo2)
+
+modelo2$AIC
+
+tidy(modelo2)
+```
+
+Para el modelo 2 se agregaron la ocupación mecanico y cientifico, que fueron analizadas conjuntamente con abogados anteriormente. Por otra parte tambien se incluyó el tip de pago 1 donde se vio una mayor cantidad de clientes y el pago minimo, que se consideró relevante para el analisis ya que muestra un gran cambio con respecto a la calidad creditica de un cliente, por lo que se asume que es una acción que hace una diferencia. 
+
+7. Predicción con modelo para train: 
+
+```{r}
+train$predictedp = predict(modelo2,newdata = train,"probs")
+train$predictedc = predict(modelo2,newdata = train,"class")
+
+
+train$original= train$Credit_Score
+train$nuevo=train$predictedc
+
+comparacion1 = table(original=train$original,nuevo=train$nuevo)
+comparacion1
+
+prop.table(comparacion1)
+
+accuracy1 <- sum(diag(comparacion1))/sum(comparacion1)*100
+accuracy1
+```
+
+Tiene un accuracy bastante bajo, por lo que se sigue considerando un mal modelo de predicción, aunque muestre un mejor akaike que el modelo 1. 
+
+
+8. Predicción con modelo para test: 
+
+```{r}
+test$predictedp = predict(modelo2,newdata = test,"probs")
+test$predictedc = predict(modelo2,newdata = test,"class")
+
+
+test$original= test$Credit_Score
+test$nuevo=test$predictedc
+
+comparacion2 = table(original=test$original,nuevo=test$nuevo)
+comparacion2
+
+prop.table(comparacion2)
+
+accuracy2 <- sum(diag(comparacion2))/sum(comparacion2)*100
+accuracy2
+```
+
+Se llega al nivel de accuracy esperado con la data de entrenamiento. 
+
+
+9. Uso de modelo para predicción de datos en segundo dataset de bancos: 
+
+```{r}
+setwd("C:/Users/abiga/Documents/DATAR")
+bank.test <- read.csv("bank2.csv")
+bank.test2 <- dummy_cols(bank.test,select_columns = c("Tipo_pago", "Pago_minimo", "Ocupacion"))
+
+
+bank.test2$predictedp = predict(modelo2,newdata = bank.test2,"probs")
+bank.test2$predictedc = predict(modelo2,newdata = bank.test2,"class")
+
+write.csv(bank.test2,"bank.final.csv")
+
+```
+
